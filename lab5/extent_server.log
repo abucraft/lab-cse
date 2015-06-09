@@ -1,0 +1,10 @@
+extent_server: getattr 1
+	im: get_inode 1
+extent_server: getattr 2
+	im: get_inode 2
+	im: inode not exist
+extent_server: getattr 1
+	im: get_inode 1
+extent_server: getattr 2
+	im: get_inode 2
+	im: inode not exist
