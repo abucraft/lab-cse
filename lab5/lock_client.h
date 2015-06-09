@@ -12,9 +12,9 @@
 class lock_client {
  protected:
   rpcc *cl;
-  //static void* thread(void *);
-  //void heartbeat();
-  //pthread_t heartbeatid;
+  static void* thread(void *);
+  void heartbeat();
+  pthread_t heartbeatid;
  public:
   lock_client(std::string d);
   virtual ~lock_client();

@@ -9,18 +9,18 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
-/*void lock_client::heartbeat(){
+void lock_client::heartbeat(){
   int r;
   while(true){
   lock_protocol::status ret = cl->call(lock_protocol::heartbeat, cl->id(),r);
   VERIFY (ret == lock_protocol::OK);
-  sleep(1);
+  usleep(10000);
   }
-}*/
+}
 
-/*void* lock_client::thread(void* cl){
+void* lock_client::thread(void* cl){
   ((lock_client*)cl)->heartbeat();
-}*/
+}
 
 lock_client::lock_client(std::string dst)
 {
@@ -31,7 +31,7 @@ lock_client::lock_client(std::string dst)
     printf("lock_client: call bind\n");
     return;
   }
-  //pthread_create(&heartbeatid,NULL,thread,this);
+  pthread_create(&heartbeatid,NULL,thread,this);
 }
 
 lock_client::~lock_client(){

@@ -13,20 +13,16 @@
 #define LOCKED 1
 class lock_server {
  protected:
-	/*struct lock_inst{
-		lock_protocol::lockid_t lock_id;
+	struct lock_stat{
 		int clt_id;
-		bool operator <(const lock_inst& i) const{
-			return lock_id+clt_id<i.lock_id+i.clt_id;
-		}
-	};*/
+		int stat;
+	};
   int nacquire;
-  std::map<lock_protocol::lockid_t,int> locks;
-  std::map<lock_protocol::lockid_t,clock_t> lock_clocks;
-  //std::map<int,int> clients;
-  //pthread_t checkthreadid;
-  //static void* thread(void*);
-  //void clientcheck();
+  std::map<lock_protocol::lockid_t,lock_stat> locks;
+  std::map<int,int> clients;
+  pthread_t checkthreadid;
+  static void* thread(void*);
+  void clientcheck();
  public:
   lock_server();
   ~lock_server();

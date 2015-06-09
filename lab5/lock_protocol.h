@@ -14,7 +14,7 @@ class lock_protocol {
     acquire = 0x7001,
     release,
     stat,
-    //heartbeat
+    heartbeat
   };
 };
 
