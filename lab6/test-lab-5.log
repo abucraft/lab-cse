@@ -1,0 +1,10 @@
+yfs1
+├── file1
+├── file2
+└── test3
+    ├── dir1
+    │   ├── file1
+    │   └── file2
+    └── file1
+
+2 directories, 5 files
