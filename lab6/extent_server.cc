@@ -78,3 +78,9 @@ int extent_server::remove(extent_protocol::extentid_t id, int &)
   return extent_protocol::OK;
 }
 
+int extent_server::clear(extent_protocol::extentid_t id,std::string &buf){
+  printf("extent_server: clear \n");
+  im->clear_all();
+
+  return extent_protocol::OK;
+}

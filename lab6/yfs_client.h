@@ -42,17 +42,19 @@ class yfs_client {
 
  private:
   bool recovermod;
-  int logcount;
+  int curversion;
   static std::string filename(inum);
   static inum n2i(std::string);
   static std::string i2n(inum inum);
   static std::vector<std::string> split(const std::string &ssource,char delim);
   static std::vector<yfs_client::dirent> str2dir(const std::string &ssource);
-  int logwrite(int transcount,inum inode,int oldsize,int offset,int contlength,int oldcontlength,std::string content);
-  int logcreate(int transcount,inum inode);
-  int logremove(int transcount,inum parent,int oldsize,inum inoderemov,int type,std::string filename,int oldcontlength,std::string oldcontent);
-  int logtransaction(int transcount,std::string type);
-  void recovery();
+  void logsetattr(inum ino,int size);
+  void logwrite(inum ino, size_t size, off_t off, const char *data);
+  void logcreate(inum parent, const char *name, mode_t mode);
+  void logunlink(inum parent,const char* name);
+  void logsymlink(const char*link,inum parent,const char*name);
+  void logmkdir(inum parent, const char *name, mode_t mode);
+  void recovery(unsigned int pos);
  public:
   yfs_client(std::string, std::string);
   bool isfile(inum);
@@ -74,6 +76,10 @@ class yfs_client {
   int symlink(const char*, inum, const char*, inum&);
   int readlink(inum, std::string&);
   int getsym(inum, syminfo &);
+
+  void commit();
+  void preversion();
+  void nextversion();
 };
 
 #endif 

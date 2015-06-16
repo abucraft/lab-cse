@@ -1,4 +1,0 @@
-head
-T [transaction number] create [inode]
-T [transaction number] remove [parent inode] [old length] [inode to remove] [type] [filename] [content length] [content before remove]
-T [transaction number] write [inode] [old length] [offset] [content length] [old content length] [content before write]

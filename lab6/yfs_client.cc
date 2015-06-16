@@ -3,6 +3,7 @@
 #include "extent_client.h"
 #include <sstream>
 #include <iostream>
+#include <fstream>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -14,140 +15,520 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
   lc = new lock_client(lock_dst);
-  logcount=0;
+  curversion=0;
   recovermod=true;
+  recovery(0);
 }
 
-int yfs_client::logtransaction(int transcount,std::string type){
-	int r=extent_protocol::OK;
-	if(recovermod==false){
-	std::string logbuf;
-	lc->acquire(LOGNODE);
-	if(ec->get(LOGNODE,logbuf)!=extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(LOGNODE);
-        	return r;
-    	}
-	logbuf+="Transaction ";
-	logbuf+=i2n(transcount);
-	logbuf+=' '+type+'\n';
-	if(ec->put(LOGNODE,logbuf)!=extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(LOGNODE);
-        	return r;
-    	}
-	lc->release(LOGNODE);
-	}
-	return r;
-} 
 
-int yfs_client::logcreate(int transcount,inum inode){
-	int r=extent_protocol::OK;
+void yfs_client::logcreate(inum parent, const char *name, mode_t mode){
 	if(recovermod==false){
-	std::string logbuf;
-	lc->acquire(LOGNODE);
-	if(ec->get(LOGNODE,logbuf)!=extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(LOGNODE);
-        	return r;
-    	}
-	logbuf+="T ";
-	logbuf+=i2n(transcount);
-	logbuf+=' ';
-	logbuf+="create ";
-	logbuf+=i2n(inode);
-	logbuf+='\n';
-	if(ec->put(LOGNODE,logbuf)!=extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(LOGNODE);
-        	return r;
-    	}
-	lc->release(LOGNODE);
+		lc->acquire(0);
+		std::ofstream ofs("log",std::ios::app);
+		if(!ofs){
+			printf("Open Log Error\n\n");
+			return;
+		}
+		unsigned int length;
+		std::string buf;
+		buf+="create ";
+		length=sizeof(name);
+		buf+=i2n(parent);
+		buf+=' ';
+		buf+=i2n(length);
+		buf+=' ';
+		for(size_t i=0;i<length;i++){
+			buf+=name[i];
+		}
+		buf+=' ';
+		buf+=i2n(mode);
+		buf+='\n';
+		ofs<<buf;
+		lc->release(0);
 	}
-	return r;
 }
 
-int yfs_client::logwrite(int transcount,inum inode,int oldsize,int offset,int contlength,int oldcontlength,std::string content){
-	int r=extent_protocol::OK;
+
+void yfs_client::logmkdir(inum parent, const char *name, mode_t mode){
 	if(recovermod==false){
-	std::string logbuf;
-	lc->acquire(LOGNODE);
-	if(ec->get(LOGNODE,logbuf)!=extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(LOGNODE);
-        	return r;
-    	}
-	logbuf+="T ";
-	logbuf+=i2n(transcount);
-	logbuf+=' ';
-	logbuf+="write ";
-	logbuf+=i2n(inode);//inode
-	logbuf+=' ';
-	logbuf+=i2n(oldsize);//oldsize
-	logbuf+=' ';
-	logbuf+=i2n(offset);//offset
-	logbuf+=' ';
-	logbuf+=i2n(contlength);//content length
-	logbuf+=' ';
-	logbuf+=i2n(oldcontlength);//old content length
-	if(oldcontlength!=0){
-		logbuf+=' ';
-		logbuf+=content;
+		lc->acquire(0);
+		std::ofstream ofs("log",std::ios::app);
+		if(!ofs){
+			printf("Open Log Error\n\n");
+			return;
+		}
+		unsigned int length;
+		std::string buf;
+		buf+="mkdir ";
+		length=strlen(name);
+		buf+=i2n(parent);
+		buf+=' ';
+		buf+=i2n(length);
+		buf+=' ';
+		for(size_t i=0;i<length;i++){
+			buf+=name[i];
+		}
+		buf+=' ';
+		buf+=i2n(mode);
+		buf+='\n';
+		ofs<<buf;
+		lc->release(0);
 	}
-	logbuf+='\n';
-	if(ec->put(LOGNODE,logbuf)!=extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(LOGNODE);
-        	return r;
-    	}
-	lc->release(LOGNODE);
-	}
-	return r;
 }
 
-int yfs_client::logremove(int transcount,inum parent,int oldsize,inum inoderemov,int type,std::string filename,int oldcontlength,std::string oldcontent){
-	int r=extent_protocol::OK;
+void yfs_client::logwrite(inum ino, size_t size, off_t off, const char *data){
 	if(recovermod==false){
-	std::string logbuf;
-	lc->acquire(LOGNODE);
-	if(ec->get(LOGNODE,logbuf)!=extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(LOGNODE);
-        	return r;
-    	}
-	logbuf+="T ";
-	logbuf+=i2n(transcount);
-	logbuf+=' ';
-	logbuf+=i2n(parent);
-	logbuf+=' ';
-	logbuf+=i2n(oldsize);
-	logbuf+=' ';
-	logbuf+=i2n(inoderemov);
-	logbuf+=' ';
-	logbuf+=i2n(type);
-	logbuf+=' ';
-	logbuf+=filename;
-	logbuf+=' ';
-	logbuf+=i2n(oldcontlength);
-	logbuf+=' ';
-	if(oldcontlength!=0){
-		logbuf+=' ';
-		logbuf+=oldcontent;
+		lc->acquire(0);
+		std::ofstream ofs("log",std::ios::app);
+		if(!ofs){
+			printf("Open Log Error\n\n");
+			return;
+		}
+		std::string buf;
+		buf+="write ";
+		buf+=i2n(ino);
+		buf+=' ';
+		buf+=i2n(size);
+		buf+=' ';
+		buf+=i2n(off);
+		buf+=' ';
+		for(size_t i=0;i<size;i++){
+			buf+=data[i];
+		}
+		buf+='\n';
+		ofs<<buf;
+		lc->release(0);
 	}
-	logbuf+='\n';
-	if(ec->put(LOGNODE,logbuf)!=extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(LOGNODE);
-        	return r;
-    	}
-	lc->release(LOGNODE);
-	}
-	return r;
 }
 
-void yfs_client::recovery(){
-	std::string logbuf;
+void yfs_client::logunlink(inum parent,const char* name){
+	if(recovermod==false){
+		lc->acquire(0);
+		std::ofstream ofs("log",std::ios::app);
+		if(!ofs){
+			printf("Open Log Error\n\n");
+			return;
+		}
+		std::string buf;
+		unsigned int length;
+		buf+="unlink ";
+		length=sizeof(name);
+		buf+=i2n(parent);
+		buf+=' ';
+		buf+=i2n(length);
+		buf+=' ';
+		for(size_t i=0;i<length;i++){
+			buf+=name[i];
+		}
+		buf+='\n';
+		ofs<<buf;
+		lc->release(0);
+	}
+}
+
+void yfs_client::logsymlink(const char*link,inum parent,const char*name){
+	if(recovermod==false){
+		lc->acquire(0);
+		std::ofstream ofs("log",std::ios::app);
+		if(!ofs){
+			printf("Open Log Error\n\n");
+			return;
+		}
+		unsigned int length;
+		std::string buf;
+		buf+="symlink ";
+		length=sizeof(link);
+		buf+=i2n(length);
+		buf+=' ';
+		buf+=link;
+		buf+=' ';
+		buf+=i2n(parent);
+		buf+=' ';
+		length=strlen(name);
+		buf+=i2n(length);
+		buf+=' ';
+		buf+=name;
+		buf+='\n';
+		ofs<<buf;
+		lc->release(0);
+	}
+}
+
+void yfs_client::logsetattr(inum ino,int size){
+	if(recovermod==false){
+		lc->acquire(0);
+		std::ofstream ofs("log",std::ios::app);
+		if(!ofs){
+			printf("Open Log Error\n\n");
+			return;
+		}
+		std::string buf;
+		buf+="setattr ";
+		buf+=i2n(ino);
+		buf+=' ';
+		buf+=i2n(size);
+		buf+='\n';
+		ofs<<buf;
+		lc->release(0);
+	}
+}
+
+void yfs_client::recovery(unsigned int pos){
+	std::ifstream ifs("log");
 	recovermod=true;
+	if(!ifs){
+		recovermod=false;
+		return;
+	}
+	ec->clear(0);
+	unsigned int cline=0;
+	while(!ifs.eof()){
+		std::string buf;
+		ifs>>buf;
+		printf("\n\nrecovery...\n\n");
+		if(buf=="setattr")
+		{
+			inum inode;
+			ifs>>inode;
+			int size;
+			ifs>>size;
+			setattr(inode,size);
+		}
+		if(buf=="write"){
+			inum inode;
+			size_t size;
+			off_t off;
+			size_t size_out=0;
+			ifs>>inode;
+			ifs>>size;
+			ifs>>off;
+			char space;
+			std::string data;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				data+=space;
+			}
+			write(inode,size,off,data.c_str(),size_out);
+			printf("\n\nredo write:%d %d %d %d\n\n",inode,size,off,size_out);
+		}
+		if(buf=="create"){
+			inum parent,ino_out;
+			size_t size;
+			int mode;
+			char space;
+			std::string name;
+			ifs>>parent;
+			ifs>>size;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+			ifs>>mode;
+			create(parent,name.c_str(),mode,ino_out);
+			printf("\n\nredo create:%d %s %d\n\n",parent,name.c_str(),ino_out);
+		}
+		if(buf=="unlink"){
+			inum parent;
+			size_t size;
+			std::string name;
+			char space;
+			ifs>>parent;
+			ifs>>size;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+			printf("\n\nredo unlink:%d %s\n\n",parent,name.c_str());
+			unlink(parent,name.c_str());
+		}
+		if(buf=="symlink"){
+			inum parent,ino_out;
+			size_t size;
+			std::string link,name;
+			char space;
+			ifs>>size;
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				link+=space;
+			}
+			ifs.get(space);
+			ifs>>parent;
+			ifs>>size;
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+			symlink(link.c_str(),parent,name.c_str(),ino_out);
+		}
+		if(buf=="mkdir"){
+			inum parent,ino_out;
+			size_t size;
+			int mode;
+			char space;
+			std::string name;
+			ifs>>parent;
+			ifs>>size;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+			ifs>>mode;
+			printf("\n\nredo mkdir:%d %s\n\n",parent,name.c_str());
+			mkdir(parent,name.c_str(),mode,ino_out);
+		}
+		if(buf=="version"){
+			ifs>>curversion;
+		}
+		cline++;
+		printf("\n\nrecover line %d\n",cline);
+		if(cline==pos)
+			break;
+	}
+	recovermod=false;
+}
+
+void yfs_client::commit(){
+	lc->acquire(0);
+	std::ofstream ofs("log",std::ios::app);
+	if(!ofs){
+		printf("Open Log Error\n\n");
+		return;
+	}
+	std::string buf;
+	buf+="version ";
+	buf+=i2n(curversion);
+	buf+='\n';
+	ofs<<buf;
+	curversion++;
+	lc->release(0);
+}
+
+void yfs_client::preversion(){
+	recovermod=true;
+	if(curversion==0)
+		return;
+	std::ifstream ifs("log");
+	if(!ifs){
+		printf("Open Log Error\n\n");
+		return;
+	}
+	printf("\n\npreversion...\n\n");
+	unsigned int pos=0;
+	unsigned int line=0;
+	while(!ifs.eof()){
+		std::string head;
+		line++;
+		ifs>>head;
+		if(head=="version"){
+			unsigned int version;
+			ifs>>version;
+			if(version==curversion-1){
+				pos=line;
+			}
+		}
+		if(head=="setattr"){
+			inum inode;
+			ifs>>inode;
+			int size;
+			ifs>>size;
+		}
+		if(head=="write"){
+			inum inode;
+			size_t size;
+			off_t off;
+			size_t size_out;
+			ifs>>inode;
+			ifs>>size;
+			ifs>>off;
+			char space;
+			std::string data;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				data+=space;
+			}
+		}
+		if(head=="create"){
+			inum parent,ino_out;
+			size_t size;
+			int mode;
+			char space;
+			std::string name;
+			ifs>>parent;
+			ifs>>size;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+			ifs>>mode;
+		}
+		if(head=="unlink"){
+			inum parent;
+			size_t size;
+			std::string name;
+			char space;
+			ifs>>parent;
+			ifs>>size;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+		}
+		if(head=="symlink"){
+			inum parent,ino_out;
+			size_t size;
+			std::string link,name;
+			char space;
+			ifs>>size;
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				link+=space;
+			}
+			ifs.get(space);
+			ifs>>parent;
+			ifs>>size;
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+		}
+		if(head=="mkdir"){
+			inum parent,ino_out;
+			size_t size;
+			int mode;
+			char space;
+			std::string name;
+			ifs>>parent;
+			ifs>>size;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+			ifs>>mode;
+		}
+	}
+	printf("\n\nturn to pos:%d,curversion:%d\n\n",pos,curversion);
+	if(pos==0)
+		return;
+	recovery(pos);
+}
+
+void yfs_client::nextversion(){
+	recovermod=true;
+	std::ifstream ifs("log");
+	if(!ifs){
+		printf("Open Log Error\n\n");
+		return;
+	}
+	unsigned int pos=0;
+	unsigned int line=0;
+	printf("\n\nnextversion...\n\n");
+	while(!ifs.eof()){
+		std::string head;
+		line++;
+		ifs>>head;
+		if(head=="version"){
+			unsigned int version;
+			ifs>>version;
+			if(version==curversion+1){
+				pos=line;
+			}
+		}
+		if(head=="setattr"){
+			inum inode;
+			ifs>>inode;
+			int size;
+			ifs>>size;
+		}
+		if(head=="write"){
+			inum inode;
+			size_t size;
+			off_t off;
+			size_t size_out;
+			ifs>>inode;
+			ifs>>size;
+			ifs>>off;
+			char space;
+			std::string data;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				data+=space;
+			}
+		}
+		if(head=="create"){
+			inum parent,ino_out;
+			size_t size;
+			int mode;
+			char space;
+			std::string name;
+			ifs>>parent;
+			ifs>>size;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+			ifs>>mode;
+		}
+		if(head=="unlink"){
+			inum parent;
+			size_t size;
+			std::string name;
+			char space;
+			ifs>>parent;
+			ifs>>size;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+		}
+		if(head=="symlink"){
+			inum parent,ino_out;
+			size_t size;
+			std::string link,name;
+			char space;
+			ifs>>size;
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				link+=space;
+			}
+			ifs.get(space);
+			ifs>>parent;
+			ifs>>size;
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+		}
+		if(head=="mkdir"){
+			inum parent,ino_out;
+			size_t size;
+			int mode;
+			char space;
+			std::string name;
+			ifs>>parent;
+			ifs>>size;
+			ifs.get(space);
+			for(size_t i=0;i<size;i++){
+				ifs.get(space);
+				name+=space;
+			}
+			ifs>>mode;
+		}
+	}
+	if(pos==0){
+		return;
+	}
+	recovery(pos);
 }
 
 yfs_client::inum
@@ -236,20 +617,12 @@ yfs_client::isfile(inum inum)
 int 
 yfs_client::symlink(const char*link, inum parent, const char*name, inum& ino_out){
 	lc->acquire(parent);
-	int transcount= logcount ;
-	logcount++;
 	int r;
 	bool found=false;
 	inum fresult=0;
-
-	//write log before transaction
-	if(logtransaction(transcount,"begin")!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(parent);
-		return r;
-	}
-	//write log OK
-
+	
+	//write log
+	logsymlink(link,parent,name);
 
 	if(lookup(parent,name,found,fresult)!=extent_protocol::OK) {
         	r = IOERR;
@@ -273,31 +646,11 @@ yfs_client::symlink(const char*link, inum parent, const char*name, inum& ino_out
 		return r;
 	}
 
-
-	//after create inode write log
-	if(logcreate(transcount,ino_out)!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(parent);
-		return r;
-	}
-	//write log OK
-
-
 	int oldsize=buf.size();
 	buf+=name;
 	buf+=MIDDELIM;
 	buf+=i2n(ino_out);
 	buf+=MIDDELIM;
-
-
-	//write log before write inode
-	if(logwrite(transcount,parent,oldsize,oldsize,buf.size()-oldsize,0,"")!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(parent);
-		return r;
-	}
-	//write log OK
-
 
 	if(ec->put(parent,buf)!=extent_protocol::OK){
 		r = IOERR;
@@ -305,16 +658,6 @@ yfs_client::symlink(const char*link, inum parent, const char*name, inum& ino_out
 		return r;
 	}
 	std::string linkcontent(link);
-
-
-	//write log before write inode
-	if(logwrite(transcount,ino_out,0,0,strlen(link),0,"")!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(parent);
-		return r;
-	}
-	//write log OK
-
 
 	lc->acquire(ino_out);
 	if(ec->put(ino_out,linkcontent)!=extent_protocol::OK){
@@ -325,15 +668,6 @@ yfs_client::symlink(const char*link, inum parent, const char*name, inum& ino_out
 	}
 	lc->release(ino_out);
 	lc->release(parent);
-
-
-	//write log after transaction
-	if(logtransaction(transcount,"end")!=extent_protocol::OK){
-		r = IOERR;
-		return r;
-	}
-	//write log OK
-
 
 	return r;
 }
@@ -448,8 +782,6 @@ yfs_client::setattr(inum ino, size_t size)
      */
 	//std::cout<<"SETATTR\n";
 	lc->acquire(ino);
-	int transcount=logcount;
-	logcount++;
 	extent_protocol::attr a;
     	if (ec->getattr(ino, a) != extent_protocol::OK) {
         	r = IOERR;
@@ -458,13 +790,8 @@ yfs_client::setattr(inum ino, size_t size)
     	}
 
 
-	//write log before transaction
-	if(logtransaction(transcount,"begin")!=extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(ino);
-        	return r;
-    	}
-	//write log OK
+	//write log before
+	logsetattr(ino,size);
 
 
 	std::string buf;
@@ -479,29 +806,7 @@ yfs_client::setattr(inum ino, size_t size)
 	bzero(changed,size);
 	origin=buf.c_str();
 	memcpy(changed,origin,size<a.size?size:a.size);
-
-	//write log before write inode
-	std::string logcontbuf;
-	int offset=0;
-	int contlength=0;
-	int oldcontlength=0;
-	if(size<a.size){
-		offset=size;
-		oldcontlength=a.size-size;
-		for(int i=size;i<a.size;i++){
-			logcontbuf+=buf[i];
-		}
-	}
-	else{
-		offset=a.size;
-		contlength=size-a.size;
-	}
-	if(logwrite(transcount,ino,oldsize,offset,contlength,oldcontlength,logcontbuf)!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(ino);
-		return r;
-	}
-	//write log OK
+	
 
 
 	std::string newbuf(changed);
@@ -514,13 +819,6 @@ yfs_client::setattr(inum ino, size_t size)
 	delete [] changed;
 	lc->release(ino);
 
-
-	//write log after transaction
-	if(logtransaction(transcount,"end")!=extent_protocol::OK){
-		r = IOERR;
-		return r;
-	}
-	//write log OK
 
 
     return r;
@@ -538,16 +836,8 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
      */
 	//std::cout<<"ON CREATE!\n"; 
 	lc->acquire(parent);
-	int transcount=logcount;
-	logcount++;
 
-	//write transaction to log
-	if(logtransaction(transcount,"begin")!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(parent);
-		return r;
-	}
-
+	logcreate(parent,name,mode);
 
 	bool found=false;
 	inum fresult=0;
@@ -573,26 +863,12 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
 		return r;
 	}
 
-	//write log after create
-	if(logcreate(transcount,ino_out)!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(parent);
-		return r;
-	}
-	
+
 	int oldsize=buf.size();
 	buf+=name;
 	buf+=MIDDELIM;
 	buf+=i2n(ino_out);
 	buf+=MIDDELIM;
-	
-
-	//write log before write inode
-	if(logwrite(transcount,parent,oldsize,oldsize,buf.size()-oldsize,0,"")!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(parent);
-		return r;
-	}
 
 
 	if(ec->put(parent,buf)!=extent_protocol::OK){
@@ -600,11 +876,6 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
 	}
 	lc->release(parent);
 
-	//write transaction end
-	if(logtransaction(transcount,"end")!=extent_protocol::OK){
-		r = IOERR;
-		return r;
-	}
 	return r;
 }
 int
@@ -620,18 +891,8 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
 	//printf("\n\nMKDIR\n\n");
 	//printf("%s\n\n",name);
 	lc->acquire(parent);
-	int transcount=logcount;
-	logcount++;
-
-
-	//write transaction
-	if(logtransaction(transcount,"begin")!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(parent);
-		return r;
-	}
-
-
+	
+	logmkdir(parent,name,mode);
 	bool found=false;
 	inum fresult=0;
 	if(lookup(parent,name,found,fresult)!=extent_protocol::OK) {
@@ -655,29 +916,11 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
 		lc->release(parent);
 		return r;
 	}
-
-	//write log after create
-	if(logcreate(transcount,ino_out)!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(parent);
-		return r;
-	}
-
-
 	int oldsize=buf.size();
 	buf+=name;
 	buf+=MIDDELIM;
 	buf+=i2n(ino_out);
 	buf+=MIDDELIM;
-	
-
-	//write log before write inode
-	if(logwrite(transcount,parent,oldsize,oldsize,buf.size()-oldsize,0,"")!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(parent);
-		return r;
-	}
-
 
 	if(ec->put(parent,buf) != extent_protocol::OK){
 		r = IOERR;
@@ -685,13 +928,6 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
 		return r;
 	}
 	lc->release(parent);
-
-	//write transaction
-	if(logtransaction(transcount,"end")!=extent_protocol::OK){
-		r = IOERR;
-		return r;
-	}
-
 	return r;
 }
 
@@ -783,15 +1019,7 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data,
      */
 	//std::cout<<"WRITE\n";
 	lc->acquire(ino);
-	int transcount=logcount;
-	logcount++;
-
-	//write transaction
-	if(logtransaction(transcount,"begin")!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(ino);
-		return r;
-	}
+	logwrite(ino,size,off,data);
 
 	std::string buf;
 	if (ec->get(ino, buf) != extent_protocol::OK) {
@@ -824,26 +1052,12 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data,
 		contlength=off-oldsize+size;
 	}
 
-	//write log before write inode
-	if(logwrite(transcount,ino,oldsize,offset,contlength,oldcontlength,oldcontbuf)!=extent_protocol::OK){
-		r = IOERR;
-		lc->release(ino);
-		return r;
-	}
-
-
 	if (ec->put(ino, buf) != extent_protocol::OK) {
         	r = IOERR;
 		lc->release(ino);
         	return r;
     	}
 	lc->release(ino);
-
-	//write transaction
-	if(logtransaction(transcount,"end")!=extent_protocol::OK){
-		r = IOERR;
-		return r;
-	}
 
 
     return r;
@@ -860,14 +1074,8 @@ int yfs_client::unlink(inum parent,const char *name)
      */
 	//printf("\n\nUNLINK\n");
 	lc->acquire(parent);
-	int transcount=logcount;
-	logcount++;
-	//write transaction
-	if(logtransaction(transcount,"begin")!= extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(parent);
-        	return r;
-    	}
+	
+	logunlink(parent,name);
 
 	std::string oldcontent;
 	std::string buf;
@@ -889,24 +1097,6 @@ int yfs_client::unlink(inum parent,const char *name)
 		return r;
 	}
 
-	//write log before remove
-	extent_protocol::attr a;
-	if(ec->getattr(dirvec[i].inum,a)!= extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(parent);
-        	return r;
-    	}
-	if(ec->get(dirvec[i].inum,oldcontent)!= extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(parent);
-        	return r;
-    	}
-	std::string filename(name);
-	if(logremove(transcount,parent,oldsize,dirvec[i].inum,a.type,filename,oldcontent.size(),oldcontent)!= extent_protocol::OK) {
-        	r = IOERR;
-		lc->release(parent);
-        	return r;
-    	}
 
 	inum inodetoremove=dirvec[i].inum;
 	dirvec.erase(dirvec.begin()+i);
@@ -930,12 +1120,6 @@ int yfs_client::unlink(inum parent,const char *name)
         	return r;
     	}
 	lc->release(parent);
-
-	//write transaction
-	if(logtransaction(transcount,"end")!= extent_protocol::OK) {
-        	r = IOERR;
-        	return r;
-    	}
     return r;
 }
 

@@ -65,4 +65,14 @@ int size;
   return ret;
 }
 
+extent_protocol::status
+extent_client::clear(extent_protocol::extentid_t eid)
+{
+  extent_protocol::status ret = extent_protocol::OK;
+  // Your lab6 code goes here
+std::string buf;
+  ret = cl->call(extent_protocol::clear,eid,buf);
+  return ret;
+}
+
 

@@ -144,6 +144,17 @@ inode_manager::inode_manager()
   }
 }
 
+
+void inode_manager::clear_all(){
+  delete bm;
+  bm = new block_manager();
+  uint32_t root_dir = alloc_inode(extent_protocol::T_DIR);
+  if (root_dir != 1) {
+    printf("\tim: error! alloc first inode %d, should be 1\n", root_dir);
+    exit(0);
+  }
+}
+
 /* Create a new file.
  * Return its inum. */
 uint32_t
